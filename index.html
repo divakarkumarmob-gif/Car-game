@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Supra Drive</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e14; font-family: 'Segoe UI', Arial, sans-serif; touch-action: none; }
+  #canvas-container { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #loading {
+    position: fixed; inset: 0; background: #0a0e14; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 100; color: #fff; gap: 16px;
+  }
+  #loading .title { font-size: 28px; font-weight: 700; letter-spacing: 2px; color: #ff3b3b; }
+  #loading .bar-track { width: 240px; height: 6px; background: #1c2330; border-radius: 3px; overflow: hidden; }
+  #loading .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#ff3b3b,#ff8a3b); transition: width .2s; }
+  #loading .sub { font-size: 13px; color: #7a8699; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: #fff; }
+
+  #speed-cluster {
+    position: absolute; top: 18px; left: 18px; background: rgba(10,14,20,0.55);
+    backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px; padding: 10px 16px; font-variant-numeric: tabular-nums;
+  }
+  #speed-val { font-size: 34px; font-weight: 800; line-height: 1; }
+  #speed-unit { font-size: 11px; color: #8fa0b8; letter-spacing: 1px; }
+  #gear-val { font-size: 12px; color: #ff8a3b; margin-top: 4px; letter-spacing: 1px; font-weight: 600; }
+
+  #credit {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: rgba(255,255,255,0.35); white-space: nowrap;
+  }
+  #credit a { color: rgba(255,255,255,0.45); }
+
+  /* Steering wheel */
+  #wheel-zone {
+    position: absolute; bottom: 22px; left: 22px; width: 130px; height: 130px;
+    pointer-events: auto; touch-action: none;
+  }
+  #wheel-ring {
+    width: 100%; height: 100%; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #2a3140, #12161e 70%);
+    border: 5px solid #3a4356; position: relative;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.5), inset 0 0 10px rgba(0,0,0,0.6);
+  }
+  #wheel-ring::before {
+    content: ''; position: absolute; inset: 14px; border-radius: 50%;
+    border: 3px solid #4b5468;
+  }
+  #wheel-ring::after {
+    content: ''; position: absolute; top: 8px; left: 50%; width: 6px; height: 16px;
+    background: #ff3b3b; transform: translateX(-50%); border-radius: 3px;
+  }
+  #wheel-grip1, #wheel-grip2 {
+    position: absolute; width: 14px; height: 34px; background: #4b5468; border-radius: 4px;
+    top: 50%; left: 4px; transform-origin: 61px 0px;
+  }
+  #wheel-grip2 { left: auto; right: 4px; transform-origin: -47px 0px; }
+
+  /* Pedal pad (accelerate/brake) */
+  #pedal-zone {
+    position: absolute; bottom: 22px; right: 22px; width: 150px; height: 150px;
+    pointer-events: auto; display: flex; flex-direction: column; gap: 10px; touch-action: none;
+  }
+  .pedal {
+    flex: 1; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; letter-spacing: 1px; color: #fff;
+    border: 1px solid rgba(255,255,255,0.15); transition: transform .08s, filter .08s;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  #accel-pedal { background: linear-gradient(160deg, #2ecc71, #1a8f4c); }
+  #accel-pedal.active { transform: scale(0.94); filter: brightness(1.3); }
+  #brake-pedal { background: linear-gradient(160deg, #ff4b4b, #a51e1e); }
+  #brake-pedal.active { transform: scale(0.94); filter: brightness(1.3); }
+
+  #reset-btn {
+    position: absolute; top: 18px; right: 18px; pointer-events: auto;
+    background: rgba(10,14,20,0.55); border: 1px solid rgba(255,255,255,0.15);
+    color: #cdd6e3; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600;
+    backdrop-filter: blur(6px);
+  }
+  #reset-btn:active { filter: brightness(1.3); }
+
+  #camera-btn {
+    position: absolute; top: 66px; right: 18px; pointer-events: auto;
+    background: rgba(10,14,20,0.55); border: 1px solid rgba(255,255,255,0.15);
+    color: #cdd6e3; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600;
+    backdrop-filter: blur(6px);
+  }
+  #camera-btn:active { filter: brightness(1.3); }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="title">SUPRA DRIVE</div>
+  <div class="bar-track"><div class="bar-fill" id="bar-fill"></div></div>
+  <div class="sub" id="loading-sub">Loading model...</div>
+</div>
+
+<div id="canvas-container"></div>
+
+<div id="hud">
+  <div id="speed-cluster">
+    <div id="speed-val">0</div>
+    <div id="speed-unit">KM/H</div>
+    <div id="gear-val">D</div>
+  </div>
+
+  <button id="reset-btn">↺ Reset</button>
+  <button id="camera-btn">📷 Cam</button>
+
+  <div id="wheel-zone">
+    <div id="wheel-ring">
+      <div id="wheel-grip1"></div>
+      <div id="wheel-grip2"></div>
+    </div>
+  </div>
+
+  <div id="pedal-zone">
+    <div class="pedal" id="accel-pedal">ACCEL ▲</div>
+    <div class="pedal" id="brake-pedal">BRAKE ▼</div>
+  </div>
+
+  <div id="credit">Model: "Toyota Supra" by Willy Decarpentrie (Sketchfab) — CC-BY-4.0</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
